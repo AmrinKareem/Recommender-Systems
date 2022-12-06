@@ -26,7 +26,7 @@ The idea is to find two matrices such that their product approximates the origin
 The difference is minimised iteratively using coordinate descent algorithm to find the local minimum. 
 
 ### MLP Based Recommender
-Embeddings are used to co - evolve user and item latent features - make recommendations based on user interests. MLP layers map latent vectors to prediction scores.
+Deep neural architecture is used to predict ratings of unwatched movies. Embeddings are used to co - evolve user and item latent features - makes recommendations based on user interests. Identity of users and an item, which is a  binarized sparse matrix is used as the input feature. MLP layers map latent vectors to prediction scores.
 
 ## Dataset
 MovieLens 100K dataset - https://grouplens.org/datasets/movielens/100k/  
