@@ -1,0 +1,157 @@
+# Building a Recommender System for Movies using K Nearest Neighbours
+This experiment tries to model the section titled "Because you watched Movie X", as seen on Netflix or other video streaming platforms which provides recommendations for movies based on a recent movie that you've watched. This is a classic example of an item-item recommendation.
+
+import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from pprint import pprint
+from scipy.sparse import csr_matrix
+from sklearn.metrics import mean_squared_error
+from sklearn.neighbors import NearestNeighbors
+
+# Load MovieLens Dataset
+
+!wget -nc http://files.grouplens.org/datasets/movielens/ml-100k.zip
+!unzip -n ml-100k.zip
+
+Load the information about the data 
+
+overall_stats = pd.read_csv('ml-100k/u.info', header=None)
+print("Details of users, items and ratings involved in the loaded movielens dataset: ",list(overall_stats[0]))
+
+## Load the Ratings Data: u.data
+The ratings are 100000 values from 1 - 5 for 1682 movies, with an average rating of 3.5.
+
+##item id column is renamed as movie id
+column_names = ['user_id','movie_id','rating','timestamp']
+ratings = pd.read_csv('ml-100k/u.data', sep='\t',header=None,names=column_names)
+ratings.head() 
+
+## Loading the movies data : u.item
+The movie IDs are ordered from 1 to 1682, with 19 genres.
+
+
+d = 'movie_id | title | release date | video release date | IMDb URL | unknown | Action | Adventure | Animation | Children | Comedy | Crime | Documentary | Drama | Fantasy | Film-Noir | Horror | Musical | Mystery | Romance | Sci-Fi | Thriller | War | Western'
+column_names2 = d.split(' | ')
+column_names2
+
+movies_dataset = pd.read_csv('ml-100k/u.item', sep='|',header=None,names=column_names2,encoding='latin-1')
+movies_dataset
+
+movies = movies_dataset[['movie_id','title']]
+movies.head()
+
+## Merging Ratings and Movies 
+
+This helps to get to get all the important data in one place. Also, the same movie could have received multiple ratings from multiple users. So, merging by movie ID heps to group the same movies together. 
+
+merged_dataset = pd.merge(ratings, movies, how='inner', on='movie_id')
+merged_dataset
+
+A dataset is created from the existing merged dataset by grouping the unique user_id and movie title combination. The ratings by a user to the same movie in different instances (timestamps) are averaged and stored in the new dataset.
+
+refined_dataset = merged_dataset.groupby(['user_id','movie_id', 'title'], as_index=False).agg({"rating":"mean"})
+
+refined_dataset
+
+## Normalization of Ratings
+
+#### Bayesian Average
+
+Bayesian Average is defined as:
+
+$r_{i} = \frac{C \times m + \Sigma{\text{reviews}}}{C+N}$
+
+where $C$ represents our confidence, $m$ represents our prior, and $N$ is the total number of reviews for movie $i$. In this case, our prior will be the average rating across all movies. By defintion, C represents "the typical dataset size". Let's make $C$ be the average number of ratings for a given movie.
+
+movie_stats = refined_dataset.groupby(['title', 'movie_id'], as_index=False)[['rating']].agg(['count', 'mean'])
+movie_stats.columns = movie_stats.columns.droplevel()
+
+
+movie_stats
+
+C = movie_stats['count'].mean()
+m = movie_stats['mean'].mean()
+
+def bayesian_avg(ratings):
+    bayesian_avg = (C*m+ratings.sum())/(C+ratings.count())
+    return bayesian_avg
+
+bayesian_avg_ratings = refined_dataset.groupby([ 'movie_id'])['rating'].agg(bayesian_avg).reset_index()
+bayesian_avg_ratings.columns = ['movie_id', 'bayesian_avg']
+movie_stats = movie_stats.merge(bayesian_avg_ratings, on = 'movie_id')
+
+movie_stats = movie_stats.merge(movies[['movie_id', 'title']])
+movie_stats.sort_values('bayesian_avg', ascending=False).head()
+
+movie_stats.sort_values('bayesian_avg', ascending=True).head()
+
+refined_dataset = pd.merge(movie_stats, refined_dataset, how='inner', on='movie_id')
+refined_dataset
+
+refined_dataset.drop(columns = ['count', 'mean', 'title_y'])
+
+refined_dataset.rename(columns = {'title_x':'title'}, inplace = True)
+
+# Movie Recommendation using Nearest Neighbours 
+
+Input the **Movie Name** and number of movies you want to get recommended, and the system outputs a list of 10 movies similar to the one entered.
+
+# pivot and create movie-user matrix
+movie_to_user_df = refined_dataset.pivot_table(
+        index='title', 
+        columns='user_id',
+      values='bayesian_avg').fillna(0)
+
+movie_to_user_df.head()
+
+movie_to_user_df.shape
+
+# transform matrix to scipy sparse matrix
+movie_to_user_sparse_df = csr_matrix(movie_to_user_df.values)
+movie_to_user_sparse_df
+
+movies_list = list(movie_to_user_df.index)
+movies_list[:10]
+len(movies_list)
+
+movie_dict = {movie : index for index, movie in enumerate(movies_list)}
+print(movie_dict)
+
+knn_movie_model = NearestNeighbors(metric='cosine', algorithm='brute')
+knn_movie_model.fit(movie_to_user_sparse_df)
+
+
+def get_similar_movies(movie, n = 10):
+  ## input to this function is the movie and number of top similar movies you want.
+  index = movie_dict[movie]
+  knn_input = np.asarray([movie_to_user_df.values[index]])
+  n = min(len(movies_list)-1,n)
+  distances, indices = knn_movie_model.kneighbors(knn_input, n_neighbors=n+1)
+  #neighbour_ids = list()
+  neighbour_movies = list()
+  print("Top",n,"movies which are very much similar to the Movie-", movie, "are: ")
+  print(" ")
+  for i in range(1,len(distances[0])):
+    print(movies_list[indices[0][i]])
+  
+  
+
+get_similar_movies('Toy Story (1995)')
+
+Observation on KNN Recommender System:
+
+An interesting observation would be that the above KNN model for movies recommends movies that are produced in very similar years of the input movie. However, the cosine distance of all those recommendations are observed to be actually quite small. This might be because there are too many zero values in our movie-user matrix. With too many zero values in our data, the data sparsity becomes a real issue for KNN model and the distance in KNN model starts to fall apart. 
+
+# calcuate total number of entries in the movie-user matrix
+num_entries = movie_to_user_df.shape[0] * movie_to_user_df.shape[1]
+# calculate total number of entries with zero values
+num_zeros = (movie_to_user_df==0).sum(axis=1).sum()
+# calculate ratio of number of zeros to number of entries
+ratio_zeros = num_zeros / num_entries
+print('There is about {:.2%} of ratings in our data is missing'.format(ratio_zeros))
+
+This result confirms the above hypothesis. The vast majority of entries in our data is zero. This explains why the distance between similar items or opposite items are both pretty large.
+
