@@ -15,14 +15,14 @@ Recommends the most rated/popular movies to all users. Underrepresents less-know
 ### Item-Item Recommender
 Recommends similar movies based on cosine/euclidean/manhattan distance between input movie and movies in the dataset. Applied normalization technique and studied results qualitatively.
 
-## Methods Studied:
+## Methods Studied
 ### Nearest Neighbour Collaborative Filtering Recommenders
 The nearest neighbour collaborative filtering method is a memory-based technique. It has two approaches - a user-user approach and an item-item approach. The similarity between users or items is computed in a multidimensional space using a similarity metric. 
 In the user-based approach, the recommender system mines the database to find correlations between users and identify how much different users agree on the movies they like. 
 The item-based approach looks for similarities between movies, and recommends the most similar movies to the user's already-rated movies. 
 
 ### Matrix Factorization based Recommender
-The idea is to find two matrices such that their product approximates the original rating matrix, ie, to find two matrices W of size m*k and H of size k*n such that the rating matrix R of size m*n is  R = WH. Initialize the two matrices with some random values and compute how different the product is from the original matrix. 
+The idea is to find two matrices such that their product approximates the original rating matrix, ie, to find two matrices W of size m\*k and H of size k\*n such that the rating matrix R of size m\*n is  R = WH. Initialize the two matrices with some random values and compute how different the product is from the original matrix. 
 The difference is minimised iteratively using coordinate descent algorithm to find the local minimum. 
 
 ### MLP Based Recommender
